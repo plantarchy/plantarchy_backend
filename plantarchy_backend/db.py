@@ -36,3 +36,13 @@ def get_games():
     with db_conn.cursor() as cur:
         cur.execute("SELECT * FROM game")
         return cur.fetchall()
+
+def get_game(passcode):
+    with db_conn.cursor() as cur:
+        cur.execute("SELECT * FROM game WHERE passcode=? LIMIT 1", passcode)
+        return cur.fetchone()
+
+def create_user():
+    with db_conn.cursor() as cur:
+        cur.execute("SELECT * FROM game")
+        return cur.fetchall()

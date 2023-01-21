@@ -1,5 +1,6 @@
 import flask
-from .db import db_conn, create_tables, get_games
+from flask import request
+from .db import db_conn, create_tables, get_games, get_game
 
 app = flask.Flask(__name__)
 create_tables()
@@ -12,4 +13,11 @@ def root():
 def games():
     return flask.jsonify({
         "games": get_games()
+    })
+
+@app.route("/login_game", methods=["POST"])
+def login_game():
+    game = get_game()
+    return flask.jsonify({
+        game: game["id"]
     })
