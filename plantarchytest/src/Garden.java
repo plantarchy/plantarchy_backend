@@ -15,4 +15,11 @@ public class Garden {
     public void plantSeed(int x, int y) {
         grid[x][y] = new Plant();
     }
+
+    public void cellClicked(int x, int y) {
+        int cellX = x / cellSize;
+        int cellY = y / cellSize;
+
+        plantSeed(cellX, cellY);
+    }
 }
