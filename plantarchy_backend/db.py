@@ -55,7 +55,9 @@ def create_game():
                 if j > 0: qs += ", "
                 qs += f"({c}, {r}, 0, '{game['id']}')"
         cur.execute(qs)
+        print("DONE1")
     db_conn.commit()
+    print("DONE2")
 
 def get_games():
     with db_conn.cursor() as cur:

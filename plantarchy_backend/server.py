@@ -2,17 +2,24 @@ import flask
 from flask import request
 from flask_cors import CORS
 import psycopg
-from .events import socketio
+from .events import socketio, update_tile
 from .db import \
     db_conn, \
     create_tables, get_games, get_game, \
     get_user, create_user, get_game_by_uuid, get_user_by_uuid, \
     get_tile, get_tiles, set_tile, get_tile_by_uuid
+from .gameloop import Gameloop
 
 app = flask.Flask(__name__)
-CORS(app)
+CORS(app, resources={r"/*":{"origins":"*"}})
 create_tables()
+game = get_game("ABCDABCD")
+gameloop = Gameloop(game["id"])
+gameloop.start()
+
+print("FUCK")
 socketio.init_app(app)
+print("YOU")
 
 @app.route("/")
 def root():
@@ -92,14 +99,15 @@ def set_tile_q():
             return flask.jsonify({
                 "error": "Tile not found"
             }), 404
-        print(tile)
         if tile is not None and tile["crop"] != 0:
             return flask.jsonify({
                 "error": "Player has already planted that square"
             }), 403
+        
         set_tile(data["crop"], data["player_uuid"], tile["id"])
         tile["crop"] = data["crop"]
         tile["player_uuid"] = data["player_uuid"]
+        update_tile(data["game_uuid"], tile)
         return flask.jsonify(tile)
 
     except psycopg.IntegrityError:
