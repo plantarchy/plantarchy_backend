@@ -9,6 +9,9 @@ socketio = SocketIO(cors_allowed_origins="*")
 #     send({ "response": "hello" }, json=True)
 
 def update_tile(game_id, tile):
-    del tile["player_id"]
-    del tile["game_id"]
-    socketio.emit(f"{game_id}/update_tile", tile)
+    socketio.emit(f"{game_id}/update_tile", {
+        "x": tile.x,
+        "y": tile.y,
+        "player_uuid": tile.owner,
+        "crop": tile.crop,
+    })

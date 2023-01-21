@@ -3,23 +3,20 @@ from flask import request
 from flask_cors import CORS
 import psycopg
 from .events import socketio, update_tile
-from .db import \
-    db_conn, \
-    create_tables, get_games, get_game, \
-    get_user, create_user, get_game_by_uuid, get_user_by_uuid, \
-    get_tile, get_tiles, set_tile, get_tile_by_uuid
-from .gameloop import Gameloop
+from . import db
+from .gameloop import Gameloop, g_gameloops, create_game, GRIDSIZE, AlreadyOwnedError
 
 app = flask.Flask(__name__)
 CORS(app, resources={r"/*":{"origins":"*"}})
-create_tables()
-game = get_game("ABCDABCD")
-gameloop = Gameloop(game["id"])
-gameloop.start()
+db.create_tables()
 
-print("FUCK")
+for loop in db.get_games():
+    g_gameloops[loop["id"]] = Gameloop(loop["id"], loop["passcode"], loop["tileset"])
+gameloop = create_game("ABCDABCD")
+print("gameloop", g_gameloops)
+db.create_game(gameloop)
+gameloop.start()
 socketio.init_app(app)
-print("YOU")
 
 @app.route("/")
 def root():
@@ -28,23 +25,32 @@ def root():
 @app.route("/games")
 def games():
     return flask.jsonify({
-        "games": get_games()
+        "games": [loop.to_json() for loop in g_gameloops.values()]
     })
 
 @app.route("/check_game", methods=["POST"])
 def login_game():
+    global g_gameloops
+    print("bameloop", g_gameloops)
+
     data = request.json
     if "game_code" not in data:
         return 400, flask.jsonify({
             "error": "Please provide passcode"
         })
-    game = get_game(data["game_code"])
-    if game is None:
+    id = ""
+    print([a.passcode for a in g_gameloops.values()])
+    for gid, loop in g_gameloops.items():
+        print(gid, loop)
+        if loop.passcode == data["game_code"]:
+            id = gid
+            break
+    else:
         return 404, flask.jsonify({
             "error": "Game not found"
         })
     return flask.jsonify({
-        "game": game["id"]
+        "game": id
     })
 
 @app.route("/login", methods=["POST"])
@@ -58,31 +64,37 @@ def login():
                 "error": "Please provide " + key
             }), 400
     print("BB", data["game_code"])
-    game = get_game(data["game_code"])
-    if game is None:
-        return flask.jsonify({
+    game = None
+    for gid, loop in g_gameloops.items():
+        print(gid, loop)
+        if loop.passcode == data["game_code"]:
+            game = loop
+            break
+    else:
+        return 404, flask.jsonify({
             "error": "Game not found"
-        }), 404
-        
-    print(game)
-    user = get_user(data["player_name"], game["id"])
-    if user is None:
-        create_user(data["player_name"], game["id"])
-        user = get_user(data["player_name"], game["id"])
+        })
+    id = ""
+    if data["player_name"] in game.players.values():
+        for uid,name in game.players.items():
+            if name == data["player_name"]:
+                id = uid
+    else:
+        id = game.add_user(data["player_name"])
 
     return flask.jsonify({
-        "game_id": game["id"],
-        "player": user["id"]
+        "game_id": game.game_uuid,
+        "player": id
     })
 
 @app.route("/get_tiles")
 def get_tiles_q():
     game_id = request.args.get("game_id")
-    if not game_id or not get_game_by_uuid(game_id):
+    if game_id not in g_gameloops:
         return flask.jsonify({
             "error": "Game not specified or not found"
         }), 404
-    return flask.jsonify(get_tiles(game_id))
+    return flask.jsonify(g_gameloops[game_id].tileset())
 
 @app.route("/set_tile", methods=["POST"])
 def set_tile_q():
@@ -94,21 +106,25 @@ def set_tile_q():
                 "error": "Please provide " + key
             }), 400
     try:
-        tile = get_tile(data["x"], data["y"], data["game_uuid"])
-        if tile is None:
+        if data["game_uuid"] not in g_gameloops:
+            return flask.jsonify({
+                "error": "Game not found"
+            }), 404
+
+        game = g_gameloops[data["game_uuid"]]
+        if not (0 <= data["x"] < GRIDSIZE and 0 <= data["y"] < GRIDSIZE):
             return flask.jsonify({
                 "error": "Tile not found"
             }), 404
-        if tile is not None and tile["crop"] != 0:
+        try:
+            game.set_tile(data["x"], data["y"], data["crop"], data["player_uuid"])
+        except AlreadyOwnedError:
             return flask.jsonify({
-                "error": "Player has already planted that square"
+                "error": "Tile owned by another player"
             }), 403
-        
-        set_tile(data["crop"], data["player_uuid"], tile["id"])
-        tile["crop"] = data["crop"]
-        tile["player_uuid"] = data["player_uuid"]
-        update_tile(data["game_uuid"], tile)
-        return flask.jsonify(tile)
+            
+        update_tile(game.game_uuid, game.tiles[data["y"]][data["x"]])
+        return flask.jsonify(game.tiles[data["y"]][data["x"]])
 
     except psycopg.IntegrityError:
         return flask.jsonify({
