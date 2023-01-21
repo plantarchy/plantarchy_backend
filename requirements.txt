@@ -1,0 +1,11 @@
+flask
+flask-cors
+flask-pymongo
+psycopg[binary]
+flask-socketio
+gevent
+gevent-websocket
+flask-jwt
+wtforms-json
+pandas
+openpyxl
