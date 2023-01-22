@@ -4,7 +4,7 @@ from flask_cors import CORS
 import psycopg
 from .events import socketio, update_tile, update_new_player
 from . import db
-from .globals import g_gameloops, g_socket_map
+from .globals import g_gameloops, g_socket_map, g_player_uuid_refcount
 from .gameloop import Gameloop, create_game, GRIDSIZE, AlreadyOwnedError, NoPlayerError, NoSeedsError
 
 app = flask.Flask(__name__)
@@ -92,6 +92,9 @@ def login():
     if id == "":
         id = game.add_user(data["player_name"])
     g_socket_map[data["socket_sid"]] = id
+    if id not in g_player_uuid_refcount:
+        g_player_uuid_refcount[id] = 0
+    g_player_uuid_refcount[id] += 1
     update_new_player(id)
 
     return flask.jsonify({
@@ -129,9 +132,9 @@ def pick_berry():
             "error": "Tile not found"
         }), 404
     tile = game.tiles[data["y"]][data["x"]]
-    print("BERRY", tile.x, tile.y, tile.crop)
+    # print("BERRY", tile.x, tile.y, tile.crop)
     if tile.crop != 4:
-        print("BERRYFAIL", tile.x, tile.y, tile.crop)
+        # print("BERRYFAIL", tile.x, tile.y, tile.crop)
         return flask.jsonify({
             "error": "Tile is not a berry"
         }), 403

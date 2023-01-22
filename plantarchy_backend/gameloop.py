@@ -6,7 +6,7 @@ from math import *
 from dataclasses import dataclass
 import threading
 from .events import update_tile
-from .globals import g_gameloops
+from .globals import g_gameloops, g_player_gamemap
 from datetime import datetime, timedelta
 
 TICKSPEED = 1 / 1
@@ -56,7 +56,7 @@ class Plant:
                     self.crop = 2
                     self.game.trigger_neighbors(self.x, self.y, self.owner)
             else:
-                print("Prune", self.x, self.y)
+                # print("Prune", self.x, self.y)
                 self.crop = 0
                 self.owner = ""
         elif self.crop == 0:
@@ -144,12 +144,13 @@ class Gameloop(threading.Thread):
     def add_user(self, username):
         id = str(uuid.uuid4())
         self.players[id] = Player(username, id, self.game_uuid)
+        g_player_gamemap[id] = self
         return id
 
     def run(self):
         while True:
             self.next_tick = datetime.now() + timedelta(seconds=TICKSPEED)
-            print("Next tick at", self.next_tick)
+            # print("Next tick at", self.next_tick)
             self.evolve()
             for id, player in self.players.items():
                 player.add_seed()
@@ -160,6 +161,14 @@ class Gameloop(threading.Thread):
             "id": self.game_uuid,
             "passcode": self.passcode,
         }
+
+    def clear(self, player_uuid):
+        for r in range(GRIDSIZE):
+            for c in range(GRIDSIZE):
+                if self.tiles[r][c].owner == player_uuid:
+                    self.tiles[r][c].crop = 0
+                    self.tiles[r][c].owner = ""
+                    update_tile(self.game_uuid, self.tiles[r][c])
 
     def to_tuple(self):
         tileset = ""
@@ -194,7 +203,7 @@ class Gameloop(threading.Thread):
                 old_evo = self.tiles[r][c].crop
                 self.tiles[r][c].evolve()
                 if self.tiles[r][c].crop != old_evo:
-                    print("Tile at", r, c, "changed from", old_evo, "to", self.tiles[r][c].crop)
+                    # print("Tile at", r, c, "changed from", old_evo, "to", self.tiles[r][c].crop)
                     update_tile(self.game_uuid, self.tiles[r][c])
 
     def trigger_neighbors(self, x, y, owner):
