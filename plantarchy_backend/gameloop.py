@@ -117,7 +117,7 @@ class Gameloop(threading.Thread):
                     self.tiles[r][c].owner = ownerlist[r * GRIDSIZE + c]
 
     def set_tile(self, x, y, crop, player_uuid):
-        if self.tiles[y][x].owner != "":
+        if (self.tiles[y][x].owner not in {player_uuid, ""}) or (self.tiles[y][x].crop != 1 and self.tiles[y][x].owner != ""):
             raise AlreadyOwnedError
         if player_uuid not in self.players:
             raise NoPlayerError

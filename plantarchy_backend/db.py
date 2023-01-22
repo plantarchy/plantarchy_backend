@@ -5,7 +5,7 @@ from psycopg.errors import SerializationFailure, Error
 from psycopg.rows import dict_row
 
 password = open("password.txt").read().strip()
-db_uri = f"postgresql://vincent:{password}@bumpy-hermit-6946.5xj.cockroachlabs.cloud:26257/plantarchy-devdb?sslmode=verify-full"
+db_uri = f"postgresql://vincent:{password}@bumpy-hermit-6946.5xj.cockroachlabs.cloud:26257/plantarchy-devdb" #?sslmode=verify-full"
 print(db_uri)
 
 db_conn = psycopg.connect(db_uri,
@@ -51,7 +51,7 @@ def create_game(gameloop):
 
 def get_games():
     with db_conn.cursor() as cur:
-        cur.execute(f"SELECT * FROM game") 
+        cur.execute(f"SELECT * FROM game")
         return cur.fetchall()
 
 def get_users(game_uuid):

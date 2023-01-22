@@ -75,11 +75,10 @@ def login():
             "error": "Game not found"
         })
     id = ""
-    if data["player_name"] in game.players.values():
-        for uid,name in game.players.items():
-            if name == data["player_name"]:
-                id = uid
-    else:
+    for uid,name in game.players.items():
+        if name.player_name == data["player_name"]:
+            id = uid
+    if id == "":
         id = game.add_user(data["player_name"])
 
     return flask.jsonify({
@@ -117,7 +116,9 @@ def pick_berry():
             "error": "Tile not found"
         }), 404
     tile = game.tiles[data["y"]][data["x"]]
+    print("BERRY", tile.x, tile.y, tile.crop)
     if tile.crop != 4:
+        print("BERRYFAIL", tile.x, tile.y, tile.crop)
         return flask.jsonify({
             "error": "Tile is not a berry"
         }), 403
@@ -127,9 +128,10 @@ def pick_berry():
         }), 403
     tile.crop = 3
     player.berries += 1
+    update_tile(game.game_uuid, tile)
     return flask.jsonify({
         "berries": player.berries
-    }), 403
+    }), 200
 
 
 @app.route("/set_tile", methods=["POST"])
