@@ -54,6 +54,11 @@ def get_games():
         cur.execute(f"SELECT * FROM game") 
         return cur.fetchall()
 
+def get_users(game_uuid):
+    with db_conn.cursor() as cur:
+        cur.execute("SELECT * FROM player WHERE game_id=%s LIMIT 1", (game_uuid,))
+        return cur.fetchone()
+
 def get_user(player_name, game_uuid):
     with db_conn.cursor() as cur:
         cur.execute("SELECT * FROM player WHERE name=%s AND game_id=%s LIMIT 1", (player_name, game_uuid))

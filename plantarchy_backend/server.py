@@ -4,7 +4,7 @@ from flask_cors import CORS
 import psycopg
 from .events import socketio, update_tile
 from . import db
-from .gameloop import Gameloop, g_gameloops, create_game, GRIDSIZE, AlreadyOwnedError
+from .gameloop import Gameloop, g_gameloops, create_game, GRIDSIZE, AlreadyOwnedError, NoPlayerError, NoSeedsError
 
 app = flask.Flask(__name__)
 CORS(app, resources={r"/*":{"origins":"*"}})
@@ -96,6 +96,42 @@ def get_tiles_q():
         }), 404
     return flask.jsonify(g_gameloops[game_id].tileset())
 
+@app.route("/pick_berry", methods=["POST"])
+def pick_berry():
+    data = request.json
+    required_keys = ["game_uuid", "player_uuid", "x", "y"]
+    for key in required_keys:
+        if key not in data:
+            return flask.jsonify({
+                "error": "Please provide " + key
+            }), 400
+    if data["game_uuid"] not in g_gameloops:
+        return flask.jsonify({
+            "error": "Game not found"
+        }), 404
+
+    game = g_gameloops[data["game_uuid"]]
+    player = game.players[data["player_uuid"]]
+    if not (0 <= data["x"] < GRIDSIZE and 0 <= data["y"] < GRIDSIZE):
+        return flask.jsonify({
+            "error": "Tile not found"
+        }), 404
+    tile = game.tiles[data["y"]][data["x"]]
+    if tile.crop != 4:
+        return flask.jsonify({
+            "error": "Tile is not a berry"
+        }), 403
+    if tile.owner != data["player_uuid"]:
+        return flask.jsonify({
+            "error": "Berry is not owned by you"
+        }), 403
+    tile.crop = 3
+    player.berries += 1
+    return flask.jsonify({
+        "berries": player.berries
+    }), 403
+
+
 @app.route("/set_tile", methods=["POST"])
 def set_tile_q():
     data = request.json
@@ -120,11 +156,25 @@ def set_tile_q():
             game.set_tile(data["x"], data["y"], data["crop"], data["player_uuid"])
         except AlreadyOwnedError:
             return flask.jsonify({
-                "error": "Tile owned by another player"
+                "error": "tile owned by another player"
             }), 403
+        except NoPlayerError:
+            return flask.jsonify({
+                "error": "No player found matching uuid"
+            }), 404
+        except NoSeedsError:
+            return flask.jsonify({
+                "error": "Out of seeds"
+            }), 418
             
-        update_tile(game.game_uuid, game.tiles[data["y"]][data["x"]])
-        return flask.jsonify(game.tiles[data["y"]][data["x"]])
+        tile = game.tiles[data["y"]][data["x"]]
+        update_tile(game.game_uuid, tile)
+        return flask.jsonify({
+            "x_coord": tile.x,
+            "y_coord": tile.y,
+            "player_uuid": tile.owner,
+            "crop": tile.crop,
+        })
 
     except psycopg.IntegrityError:
         return flask.jsonify({

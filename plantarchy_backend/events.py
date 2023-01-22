@@ -9,9 +9,15 @@ socketio = SocketIO(cors_allowed_origins="*")
 #     send({ "response": "hello" }, json=True)
 
 def update_tile(game_id, tile):
+    # print({
+    #     "x_coord": tile.x,
+    #     "y_coord": tile.y,
+    #     "player_uuid": tile.owner,
+    #     "crop": tile.crop,
+    # })
     socketio.emit(f"{game_id}/update_tile", {
-        "x": tile.x,
-        "y": tile.y,
+        "x_coord": tile.x,
+        "y_coord": tile.y,
         "player_uuid": tile.owner,
         "crop": tile.crop,
     })
