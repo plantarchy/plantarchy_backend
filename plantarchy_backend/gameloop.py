@@ -78,7 +78,7 @@ class Player:
     def add_seed(self):
         self.next_seed_in -= 1
         if self.next_seed_in == 0:
-            if self.seeds < 200:
+            if self.seeds < 30:
                 self.seeds += 1
             self.next_seed_in = 3
 
