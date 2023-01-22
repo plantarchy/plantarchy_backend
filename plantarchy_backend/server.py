@@ -283,3 +283,27 @@ def extract():
         return flask.jsonify({
             "error": "Not enough berries"
         }), 403
+
+@app.route("/harvest", methods=["POST"])
+def harvest():
+    data = request.json
+    required_keys = ["game_uuid", "player_uuid"]
+    for key in required_keys:
+        if key not in data:
+            return flask.jsonify({
+                "error": "Please provide " + key
+            }), 400
+    game = g_gameloops[data["game_uuid"]]
+    if data["player_uuid"] not in game.players:
+        return flask.jsonify({
+            "error": "User not found"
+        }), 404
+    try:
+        game.harvest(data["player_uuid"])
+        return flask.jsonify({
+            "status": "OK"
+        }), 200
+    except NoBerriesError:
+        return flask.jsonify({
+            "error": "Cooldown not satisfied"
+        }), 403

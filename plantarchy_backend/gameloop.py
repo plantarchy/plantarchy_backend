@@ -72,6 +72,7 @@ class Player:
         self.game_uuid = game_uuid
         self.berries = 0
         self.seeds = 5
+        self.harvest_cooldown = 5
         self.land = 0
         self.next_seed_in = 3
 
@@ -87,6 +88,7 @@ class Player:
             "id": self.player_uuid,
             "game_uuid": self.game_uuid,
             "player_name": self.player_name,
+            "harvest_cooldown": self.harvest_cooldown,
             "berries": self.berries,
             "seeds": self.seeds,
             "land": self.land,
@@ -167,6 +169,8 @@ class Gameloop(threading.Thread):
             self.evolve()
             for id, player in self.players.items():
                 player.add_seed()
+                if player.harvest_cooldown > 0:
+                    player.harvest_cooldown -= 1
             to_remove = []
             for player, v in self.player_timeouts.items():
                 self.player_timeouts[player] -= 1
@@ -307,6 +311,21 @@ class Gameloop(threading.Thread):
             self.players[player_uuid].seeds += 5
         else:
             raise NoBerriesError
+
+    def harvest(self, player_uuid):
+        player = self.players[player_uuid]
+        if player.harvest_cooldown > 0:
+            raise NoBerriesError
+
+        for r in range(GRIDSIZE):
+            for c in range(GRIDSIZE):
+                tile = self.tiles[r][c]
+                if tile.crop == 4 and tile.owner == player_uuid:
+                    self.tiles[r][c].crop = 3
+                    player.berries += 1
+                    update_tile(self.game_uuid, tile)
+        player.harvest_cooldown = 20
+
 
 def create_game(game_code):
     global g_gameloops
