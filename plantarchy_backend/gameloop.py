@@ -6,7 +6,7 @@ from math import *
 from dataclasses import dataclass
 import threading
 from .events import update_tile
-from .globals import g_gameloops, g_player_gamemap
+from .globals import g_gameloops, g_player_gamemap, g_player_timeout
 from datetime import datetime, timedelta
 
 TICKSPEED = 1 / 1
@@ -21,11 +21,12 @@ class Plant:
         self.y = y
         self.age = age
 
-    def evolve(self):
+    def evolve(self, fertilize=False):
 
         if 1 < self.crop <= 4:
             self.age += 1
-            death_bound = floor((80/(abs(self.game.count_neighbors(self.x, self.y) - 4) + 1))/(self.game.count_enemies(self, self.x, self.y) + 1))
+            death_bound = floor(80/(abs(self.game.count_neighbors(self.x, self.y) - 4) + 1))
+            #(self.game.count_enemies(self, self.x, self.y) + 1)x
             die = False
             if (self.age < death_bound - 1):
                 die = random.randint(0, death_bound - self.age - 1) == 0
@@ -52,7 +53,8 @@ class Plant:
         elif self.crop == 1:
             self.age = 0
             if (self.game.count_neighbors(self.x, self.y) >= 1):
-                if random.randint(0, 29) == 0:
+                threshold = 14 if fertilize else 29
+                if random.randint(0, threshold) == 0:
                     self.crop = 2
                     self.game.trigger_neighbors(self.x, self.y, self.owner)
             else:
@@ -70,6 +72,7 @@ class Player:
         self.game_uuid = game_uuid
         self.berries = 0
         self.seeds = 5
+        self.land = 0
         self.next_seed_in = 3
 
     def add_seed(self):
@@ -85,7 +88,7 @@ class Player:
             "player_name": self.player_name,
             "berries": self.berries,
             "seeds": self.seeds,
-            "next_seed_in": self.next_seed_in,
+            "land": self.land,
         }
 
 class AlreadyOwnedError(Exception):
@@ -112,8 +115,10 @@ class Gameloop(threading.Thread):
         self.game_uuid = game_uuid
         self.passcode = passcode
         self.last_tick = datetime.now()
+        self.fertilize_ticks = {}
         self.tiles = []
         self.players = {}
+        self.player_timeouts = {}
         for r in range(GRIDSIZE):
             self.tiles.append([])
             for c in range(GRIDSIZE):
@@ -154,6 +159,21 @@ class Gameloop(threading.Thread):
             self.evolve()
             for id, player in self.players.items():
                 player.add_seed()
+            to_remove = []
+            for player, v in self.player_timeouts.items():
+                self.player_timeouts[player] -= 1
+                if self.player_timeouts[player] <= 0:
+                    self.clear(player)
+                    to_remove.append(player)
+            for player in to_remove:
+                    del self.player_timeouts[player]
+                    del self.players[player]
+
+            print(self.players, self.player_timeouts)
+
+            for player, v in self.fertilize_ticks.items():
+                if self.fertilize_ticks[player] > 0:
+                    self.fertilize_ticks[player] -= 1
             time.sleep((self.next_tick - datetime.now()).microseconds / 1e6)
 
     def to_json(self):
@@ -198,13 +218,20 @@ class Gameloop(threading.Thread):
         return _tileset
 
     def evolve(self):
+        counts = {}
         for r in range(GRIDSIZE):
             for c in range(GRIDSIZE):
                 old_evo = self.tiles[r][c].crop
-                self.tiles[r][c].evolve()
+                self.tiles[r][c].evolve(self.fertilize_ticks.get(self.tiles[r][c].owner, 0) > 0)
                 if self.tiles[r][c].crop != old_evo:
                     # print("Tile at", r, c, "changed from", old_evo, "to", self.tiles[r][c].crop)
                     update_tile(self.game_uuid, self.tiles[r][c])
+                if self.tiles[r][c].crop >= 2:
+                    if self.tiles[r][c].owner not in counts:
+                        counts[self.tiles[r][c].owner] = 0
+                    counts[self.tiles[r][c].owner] += 1
+        for id,count in counts.items():
+            self.players[id].land = count
 
     def trigger_neighbors(self, x, y, owner):
         dirs = [(0, 1), (1, 0), (0, -1), (-1, 0), (1, 1), (-1, -1), (-1, 1), (1, -1)]
@@ -240,6 +267,17 @@ class Gameloop(threading.Thread):
             if self.tiles[y + dir[1]][x + dir[0]].crop > 1 and self.tiles[y + dir[1]][x + dir[0]].owner != owner:
                 count += 1
         return count
+
+    def berry_bomb(self, x, y):
+        count = 0
+        dirs = [(0, 0), (0, 1), (1, 0), (0, -1), (-1, 0), (1, 1), (-1, -1), (-1, 1), (1, -1)]
+        for dir in dirs:
+            if not (0 <= x + dir[0] < GRIDSIZE and 0 <= y + dir[1] < GRIDSIZE):
+                continue
+            self.tiles[y + dir[1]][x + dir[0]].crop = 0
+        
+    def fertilize(self, player_uuid):
+        self.fertilize_ticks[player_uuid] = 10
 
 def create_game(game_code):
     global g_gameloops

@@ -1,26 +1,19 @@
 from datetime import datetime
 from flask import request
 from flask_socketio import SocketIO, send, emit
-from .globals import g_player_gamemap, g_socket_map, g_player_uuid_refcount
+from .globals import g_player_gamemap, g_socket_map, g_player_timeout, g_gameloops
 
 socketio = SocketIO(cors_allowed_origins="*")
 
-@socketio.on('disconnect')
-def handle_disconnect():
-    print(request.sid)
-    print("GAMER", g_socket_map)
-    id = g_socket_map[request.sid]
-    if id not in g_player_uuid_refcount:
-        g_player_uuid_refcount[id] = 0
-    g_player_uuid_refcount[id] -= 1
-    if g_player_uuid_refcount[id] <= 0:
-        del g_player_uuid_refcount[id]
-        print("FIRE DISCONNECT", id)
-        socketio.emit(f"disconnect_player", {
-            "id": id
-        })
-        g_player_gamemap[id].clear(id)
-        del g_socket_map[request.sid]
+@socketio.on("ping")
+def handle_ping(data):
+    if "player_id" not in data:
+        return
+    if "game_id" not in data:
+        return
+    if data["game_id"] not in g_gameloops:
+        return
+    g_gameloops[data["game_id"]].player_timeouts[data["player_id"]] = 3
 
 def update_tile(game_id, tile):
     # print({
@@ -40,3 +33,6 @@ def update_new_player(player_uuid):
     socketio.emit(f"new_player", {
         "id": player_uuid
     })
+
+# def update_player(game_uuid, player):
+#     socketio.emit(f"{game_uuid}/player_update", player.to_json())

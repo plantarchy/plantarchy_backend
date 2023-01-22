@@ -4,7 +4,7 @@ from flask_cors import CORS
 import psycopg
 from .events import socketio, update_tile, update_new_player
 from . import db
-from .globals import g_gameloops, g_socket_map, g_player_uuid_refcount
+from .globals import g_gameloops, g_socket_map, g_player_uuid_refcount, g_player_gamemap
 from .gameloop import Gameloop, create_game, GRIDSIZE, AlreadyOwnedError, NoPlayerError, NoSeedsError
 
 app = flask.Flask(__name__)
@@ -38,6 +38,21 @@ def users():
         }), 404
     game = g_gameloops[game_id]
     return flask.jsonify([player.to_json() for player in game.players.values()])
+
+@app.route("/get_user")
+def user():
+    player_id = request.args.get("player_id")
+    if player_id not in g_player_gamemap:
+        return flask.jsonify({
+            "error": "Player not found"
+        }), 404
+    game = g_player_gamemap[player_id]
+    if player_id not in game.players:
+        return flask.jsonify({
+            "error": "Player not found"
+        }), 404
+    return flask.jsonify(game.players[player_id].to_json())
+
 
 @app.route("/check_game", methods=["POST"])
 def login_game():
@@ -198,3 +213,35 @@ def set_tile_q():
         return flask.jsonify({
             "error": "Game ID or player ID was invalid"
         }), 404
+
+@app.route("/berry_bomb", methods=["POST"])
+def berry_bomb():
+    data = request.json
+    required_keys = ["game_uuid", "x", "y"]
+    for key in required_keys:
+        if key not in data:
+            return flask.jsonify({
+                "error": "Please provide " + key
+            }), 400
+    print("BERRY BOMB!")
+    game = g_gameloops[data["game_uuid"]]
+    game.berry_bomb(data["x"], data["y"])
+    return flask.jsonify({
+        "status": "OK"
+    }), 200
+
+
+@app.route("/fertilize", methods=["POST"])
+def fertilize():
+    data = request.json
+    required_keys = ["game_uuid", "player_uuid"]
+    for key in required_keys:
+        if key not in data:
+            return flask.jsonify({
+                "error": "Please provide " + key
+            }), 400
+    game = g_gameloops[data["game_uuid"]]
+    game.fertilize(data["player_uuid"])
+    return flask.jsonify({
+        "status": "OK"
+    }), 200
