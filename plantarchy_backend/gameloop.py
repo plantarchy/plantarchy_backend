@@ -109,6 +109,12 @@ class NoSeedsError(Exception):
     """
     pass
 
+class NoBerriesError(Exception):
+    """
+    No berries
+    """
+    pass
+
 class Gameloop(threading.Thread):
     def __init__(self, game_uuid, passcode, tileset = "", ownerset = "", *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -149,6 +155,7 @@ class Gameloop(threading.Thread):
     def add_user(self, username):
         id = str(uuid.uuid4())
         self.players[id] = Player(username, id, self.game_uuid)
+        self.player_timeouts[id] = 2
         g_player_gamemap[id] = self
         return id
 
@@ -166,8 +173,11 @@ class Gameloop(threading.Thread):
                     self.clear(player)
                     to_remove.append(player)
             for player in to_remove:
+                try:
                     del self.player_timeouts[player]
                     del self.players[player]
+                except KeyError:
+                    pass
 
             print(self.players, self.player_timeouts)
 
@@ -268,16 +278,34 @@ class Gameloop(threading.Thread):
                 count += 1
         return count
 
-    def berry_bomb(self, x, y):
+    def berry_bomb(self, player_uuid, x, y):
+        if self.players[player_uuid].berries >= 15:
+            self.players[player_uuid].berries -= 15
+        else:
+            raise NoBerriesError
+
         count = 0
-        dirs = [(0, 0), (0, 1), (1, 0), (0, -1), (-1, 0), (1, 1), (-1, -1), (-1, 1), (1, -1)]
-        for dir in dirs:
-            if not (0 <= x + dir[0] < GRIDSIZE and 0 <= y + dir[1] < GRIDSIZE):
-                continue
-            self.tiles[y + dir[1]][x + dir[0]].crop = 0
+        # dirs = [(0, 0), (0, 1), (1, 0), (0, -1), (-1, 0), (1, 1), (-1, -1), (-1, 1), (1, -1)]
+        for r in range(-2, 3):
+            for c in range(-2, 3):
+                if not (0 <= x + c < GRIDSIZE and 0 <= y + r < GRIDSIZE):
+                    continue
+                self.tiles[y + r][x + c].crop = 0
+                update_tile(self.game_uuid, self.tiles[y + r][x + c])
         
     def fertilize(self, player_uuid):
-        self.fertilize_ticks[player_uuid] = 10
+        if self.players[player_uuid].berries >= 30:
+            self.players[player_uuid].berries -= 30
+            self.fertilize_ticks[player_uuid] = 10
+        else:
+            raise NoBerriesError
+
+    def extract(self, player_uuid):
+        if self.players[player_uuid].berries >= 10:
+            self.players[player_uuid].berries -= 10
+            self.players[player_uuid].seeds += 5
+        else:
+            raise NoBerriesError
 
 def create_game(game_code):
     global g_gameloops

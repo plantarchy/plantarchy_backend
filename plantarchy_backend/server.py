@@ -5,7 +5,7 @@ import psycopg
 from .events import socketio, update_tile, update_new_player
 from . import db
 from .globals import g_gameloops, g_socket_map, g_player_uuid_refcount, g_player_gamemap
-from .gameloop import Gameloop, create_game, GRIDSIZE, AlreadyOwnedError, NoPlayerError, NoSeedsError
+from .gameloop import Gameloop, create_game, GRIDSIZE, AlreadyOwnedError, NoPlayerError, NoSeedsError, NoBerriesError
 
 app = flask.Flask(__name__)
 CORS(app, resources={r"/*":{"origins":"*"}})
@@ -107,9 +107,6 @@ def login():
     if id == "":
         id = game.add_user(data["player_name"])
     g_socket_map[data["socket_sid"]] = id
-    if id not in g_player_uuid_refcount:
-        g_player_uuid_refcount[id] = 0
-    g_player_uuid_refcount[id] += 1
     update_new_player(id)
 
     return flask.jsonify({
@@ -217,7 +214,7 @@ def set_tile_q():
 @app.route("/berry_bomb", methods=["POST"])
 def berry_bomb():
     data = request.json
-    required_keys = ["game_uuid", "x", "y"]
+    required_keys = ["game_uuid", "player_uuid", "x", "y"]
     for key in required_keys:
         if key not in data:
             return flask.jsonify({
@@ -225,11 +222,19 @@ def berry_bomb():
             }), 400
     print("BERRY BOMB!")
     game = g_gameloops[data["game_uuid"]]
-    game.berry_bomb(data["x"], data["y"])
-    return flask.jsonify({
-        "status": "OK"
-    }), 200
-
+    if data["player_uuid"] not in game.players:
+        return flask.jsonify({
+            "error": "User not found"
+        }), 404
+    try:
+        game.berry_bomb(data["player_uuid"], data["x"], data["y"])
+        return flask.jsonify({
+            "status": "OK"
+        }), 200
+    except NoBerriesError:
+        return flask.jsonify({
+            "error": "Not enough berries"
+        }), 403
 
 @app.route("/fertilize", methods=["POST"])
 def fertilize():
@@ -241,7 +246,40 @@ def fertilize():
                 "error": "Please provide " + key
             }), 400
     game = g_gameloops[data["game_uuid"]]
-    game.fertilize(data["player_uuid"])
+    if data["player_uuid"] not in game.players:
+        return flask.jsonify({
+            "error": "User not found"
+        }), 404
+    try:
+        game.fertilize(data["player_uuid"])
+    except NoBerriesError:
+        return flask.jsonify({
+            "error": "Not enough berries"
+        }), 403
     return flask.jsonify({
         "status": "OK"
     }), 200
+
+@app.route("/extract", methods=["POST"])
+def extract():
+    data = request.json
+    required_keys = ["game_uuid", "player_uuid"]
+    for key in required_keys:
+        if key not in data:
+            return flask.jsonify({
+                "error": "Please provide " + key
+            }), 400
+    game = g_gameloops[data["game_uuid"]]
+    if data["player_uuid"] not in game.players:
+        return flask.jsonify({
+            "error": "User not found"
+        }), 404
+    try:
+        game.extract(data["player_uuid"])
+        return flask.jsonify({
+            "status": "OK"
+        }), 200
+    except NoBerriesError:
+        return flask.jsonify({
+            "error": "Not enough berries"
+        }), 403
