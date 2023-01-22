@@ -6,12 +6,11 @@ from math import *
 from dataclasses import dataclass
 import threading
 from .events import update_tile
+from .globals import g_gameloops
 from datetime import datetime, timedelta
 
 TICKSPEED = 1 / 1
 GRIDSIZE = 35
-
-g_gameloops = {}
 
 class Plant:
     def __init__(self, game: 'Gameloop', owner, crop, x, y, age = 0):
@@ -26,7 +25,7 @@ class Plant:
 
         if 1 < self.crop <= 4:
             self.age += 1
-            death_bound = floor(80/(abs(self.game.count_neighbors(self.x, self.y) - 4) + 1))
+            death_bound = floor((80/(abs(self.game.count_neighbors(self.x, self.y) - 4) + 1))/(self.game.count_enemies(self, self.x, self.y) + 1))
             die = False
             if (self.age < death_bound - 1):
                 die = random.randint(0, death_bound - self.age - 1) == 0
@@ -78,6 +77,16 @@ class Player:
         if self.next_seed_in == 0:
             self.seeds += 1
             self.next_seed_in = 3
+
+    def to_json(self):
+        return {
+            "id": self.player_uuid,
+            "game_uuid": self.game_uuid,
+            "player_name": self.player_name,
+            "berries": self.berries,
+            "seeds": self.seeds,
+            "next_seed_in": self.next_seed_in,
+        }
 
 class AlreadyOwnedError(Exception):
     """
@@ -210,6 +219,16 @@ class Gameloop(threading.Thread):
             if not (0 <= x + dir[0] < GRIDSIZE and 0 <= y + dir[1] < GRIDSIZE):
                 continue
             if self.tiles[y + dir[1]][x + dir[0]].crop > 1:
+                count += 1
+        return count
+    
+    def count_enemies(self, owner, x, y):
+        count = 0
+        dirs = [(0, 1), (1, 0), (0, -1), (-1, 0), (1, 1), (-1, -1), (-1, 1), (1, -1)]
+        for dir in dirs:
+            if not (0 <= x + dir[0] < GRIDSIZE and 0 <= y + dir[1] < GRIDSIZE):
+                continue
+            if self.tiles[y + dir[1]][x + dir[0]].crop > 1 and self.tiles[y + dir[1]][x + dir[0]].owner != owner:
                 count += 1
         return count
 

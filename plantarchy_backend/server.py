@@ -2,9 +2,10 @@ import flask
 from flask import request
 from flask_cors import CORS
 import psycopg
-from .events import socketio, update_tile
+from .events import socketio, update_tile, update_new_player
 from . import db
-from .gameloop import Gameloop, g_gameloops, create_game, GRIDSIZE, AlreadyOwnedError, NoPlayerError, NoSeedsError
+from .globals import g_gameloops, g_socket_map
+from .gameloop import Gameloop, create_game, GRIDSIZE, AlreadyOwnedError, NoPlayerError, NoSeedsError
 
 app = flask.Flask(__name__)
 CORS(app, resources={r"/*":{"origins":"*"}})
@@ -27,6 +28,16 @@ def games():
     return flask.jsonify({
         "games": [loop.to_json() for loop in g_gameloops.values()]
     })
+
+@app.route("/get_users")
+def users():
+    game_id = request.args.get("game_id")
+    if game_id not in g_gameloops:
+        return flask.jsonify({
+            "error": "Game not found"
+        }), 404
+    game = g_gameloops[game_id]
+    return flask.jsonify([player.to_json() for player in game.players.values()])
 
 @app.route("/check_game", methods=["POST"])
 def login_game():
@@ -57,7 +68,7 @@ def login_game():
 def login():
     data = request.json
     print("DATA", data)
-    required_keys = ["game_code", "player_name"]
+    required_keys = ["game_code", "player_name", "socket_sid"]
     for key in required_keys:
         if key not in data:
             return flask.jsonify({
@@ -80,6 +91,8 @@ def login():
             id = uid
     if id == "":
         id = game.add_user(data["player_name"])
+    g_socket_map[data["socket_sid"]] = id
+    update_new_player(id)
 
     return flask.jsonify({
         "game_id": game.game_uuid,

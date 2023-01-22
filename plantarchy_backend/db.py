@@ -1,3 +1,4 @@
+import threading
 import random
 import string
 import psycopg
@@ -85,3 +86,6 @@ def update_tileset(gameloop):
             ('{tileset}', '{gameloop.game_uuid}')
         """)
     db_conn.commit()
+
+class UpdateThread(threading.Thread):
+    pass
